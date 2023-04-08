@@ -2,4 +2,5 @@
 .pyc
 *.iml
 .directory
-.idea
+cache.key
+cache.bin

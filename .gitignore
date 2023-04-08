@@ -3,3 +3,6 @@
 .idea
 .env
 __pycache__
+cache.bin
+
+cache.key
