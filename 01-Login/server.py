@@ -1,6 +1,3 @@
-"""Python Flask WebApp Auth0 integration example
-"""
-
 import json
 from os import environ as env
 from urllib.parse import quote_plus, urlencode
@@ -18,7 +15,7 @@ cache = LocalCache()
 app = Flask(__name__)
 app.secret_key = env.get("APP_SECRET_KEY")
 
-oauth = OAuth(app, cache=cache)
+oauth = OAuth(app)
 
 oauth.register(
     "auth0",
@@ -32,23 +29,54 @@ oauth.register(
 )
 
 
-def refresh_token(refresh_token):
-    oauth.update_token()
+def get(url, **kwargs):
+    process_token()
+    return oauth.auth0.get(url, **kwargs)
+
+
+def process_token():
+    if oauth.auth0.token is not None:
+        token = oauth.auth0.token
+    elif session.get('user', None) is not None:
+        token = session.get('user', None)
+        oauth.oauth2_client_cls.token = token
+    else:
+        token = cache.get('enrique.polo', None)
+        oauth.oauth2_client_cls.token = token
+        session["user"] = oauth.oauth2_client_cls.token
+    if cache.get('enrique.polo', None) != token:
+        cache.set('enrique.polo', token)
+
 
 # Controllers API
 @app.route("/", methods=["GET", "POST"])
 def home():
-    my_dict = cache.load_dict()
-    if 'code' not in request.args.keys():
-        return render_template(
-            "home.html",
-            session=session.get("user"),
-            pretty=json.dumps(session.get("user"), indent=4),
-        )
-    token = oauth.auth0.authorize_access_token()
-    session["user"] = token
-    return redirect("/")
+    if 'code' in request.args:
+        token = oauth.auth0.authorize_access_token()
+        session["user"] = token
+        return redirect("/")
 
+    process_token()
+    return render_template(
+        "home.html",
+        session=session.get("user"),
+        pretty=json.dumps(session.get("user"), indent=4),
+    )
+
+@app.route("/bars")
+def bars():
+    process_token()
+    symbol = 'MSFT'
+    interval = '15'
+    unit = 'Minute'
+    barsback = '100'
+    query = f'{symbol}?interval={interval}&unit={unit}&barsback={barsback}'
+    response = get(f'https://{env.get("API_DOMAIN")}/v3/marketdata/barcharts/{query}')
+    return render_template(
+        "home.html",
+        session=session.get("user"),
+        pretty=json.dumps(response.json(), indent=4),
+    )
 
 @app.route("/login")
 def login():
@@ -76,4 +104,4 @@ def logout():
     )
 
 if __name__ == "__main__":
-    app.run(host="localhost", port=env.get("PORT", 8080))
+    app.run(host="localhost", load_dotenv=True)
